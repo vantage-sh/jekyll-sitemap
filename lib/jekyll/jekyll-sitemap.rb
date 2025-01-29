@@ -4,13 +4,23 @@ require "fileutils"
 
 module Jekyll
   class JekyllSitemap < Jekyll::Generator
+    # Google limits the size of a single sitemap to 50 MB (uncompressed) or 50,000 URLs
+    SITEMAP_LIMIT = 50_000
+
     safe true
     priority :lowest
 
     # Main plugin action, called by Jekyll-core
     def generate(site)
       @site = site
-      @site.pages << sitemap unless file_exists?("sitemap.xml")
+
+      if !file_exists?("sitemap.xml")
+        sitemaps.each do |sitemap|
+          @site.pages << sitemap
+          @sitemap = sitemap
+        end
+      end
+
       @site.pages << robots unless file_exists?("robots.txt")
     end
 
@@ -45,19 +55,50 @@ module Jekyll
       @site.in_dest_dir(file)
     end
 
-    def sitemap
-      site_map = PageWithoutAFile.new(@site, __dir__, "", "sitemap.xml")
-      site_map.content = File.read(source_path).gsub(MINIFY_REGEX, "")
-      site_map.data["layout"] = nil
-      site_map.data["static_files"] = static_files.map(&:to_liquid)
-      site_map.data["xsl"] = file_exists?("sitemap.xsl")
-      site_map
+    def sitemaps
+      all_files = static_files.map(&:to_liquid)
+
+      if all_files.size > SITEMAP_LIMIT
+        @sitemap_index = true
+        sub_sitemaps = []
+        sub_sitemaps_filenames = []
+
+        all_files.each_slice(SITEMAP_LIMIT).with_index do |files, i|
+          sub_sitemap_filename = "sitemap_#{i}.xml"
+          sub_sitemaps_filenames << sub_sitemap_filename
+
+          site_map = PageWithoutAFile.new(@site, __dir__, "", sub_sitemap_filename)
+          site_map.content = File.read(source_path).gsub(MINIFY_REGEX, "")
+          site_map.data["layout"] = nil
+          site_map.data["static_files"] = files
+
+          sub_sitemaps << site_map
+        end
+
+        index = PageWithoutAFile.new(@site, __dir__, "", "sitemap_index.xml")
+        index.content = File.read(source_path("sitemap_index.xml")).gsub(MINIFY_REGEX, "")
+        index.data["layout"] = nil
+        index.data["permalink"] = "/sitemap_index.xml"
+        index.data["linked_sitemaps"] = sub_sitemaps_filenames
+        index.data["xsl"] = file_exists?("sitemap_index.xsl")
+
+        [sub_sitemaps, index].flatten
+      else
+        site_map = PageWithoutAFile.new(@site, __dir__, "", "sitemap.xml")
+        site_map.content = File.read(source_path).gsub(MINIFY_REGEX, "")
+        site_map.data["layout"] = nil
+        site_map.data["static_files"] = all_files
+        site_map.data["xsl"] = file_exists?("sitemap.xsl")
+        
+        [site_map]
+      end
     end
 
     def robots
       robots = PageWithoutAFile.new(@site, __dir__, "", "robots.txt")
       robots.content = File.read(source_path("robots.txt"))
       robots.data["layout"] = nil
+      robots.data["sitemap"] = @sitemap_index ? "sitemap_index.xml" : "sitemap.xml"
       robots
     end
 
