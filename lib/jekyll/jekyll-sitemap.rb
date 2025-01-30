@@ -5,7 +5,7 @@ require "fileutils"
 module Jekyll
   class JekyllSitemap < Jekyll::Generator
     # Google limits the size of a single sitemap to 50 MB (uncompressed) or 50,000 URLs
-    SITEMAP_LIMIT = 50_000
+    SITEMAP_LIMIT = 30_000
 
     safe true
     priority :lowest
@@ -71,7 +71,7 @@ module Jekyll
           site_map.content = File.read(source_path).gsub(MINIFY_REGEX, "")
           site_map.data["layout"] = nil
           site_map.data["static_files"] = files
-
+          puts files.size
           sub_sitemaps << site_map
         end
 
