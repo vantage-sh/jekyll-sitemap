@@ -71,7 +71,7 @@ module Jekyll
           site_map.content = File.read(source_path).gsub(MINIFY_REGEX, "")
           site_map.data["layout"] = nil
           site_map.data["static_files"] = files
-          puts files.size
+
           sub_sitemaps << site_map
         end
 
